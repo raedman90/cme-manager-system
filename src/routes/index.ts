@@ -12,6 +12,7 @@ import { cycleDebugRoutes } from './cycleDebugRoutes'
 import metricsRoutes from './metricsRoutes'
 import { meRouter } from './me'
 import { chemicalsRoutes } from './chemicalsRoutes'
+import stageMetaRoutes from './stageMetaRoutes'
 
 export const router = Router()
 
@@ -28,3 +29,4 @@ router.use("/api/cycles", cycleDebugRoutes);
 router.use("/metrics", metricsRoutes);
 router.use(meRouter);
 router.use("/chemicals", chemicalsRoutes);
+router.use("/stage-events", stageMetaRoutes);
