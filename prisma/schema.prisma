@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EventSource {
+  DB
+  LEDGER
+}
+
+// enums novos
+enum WashMethod { 
+  MANUAL 
+  ULTRASSONICA 
+  TERMO_DESINFECCAO 
+}
+enum Disinfectant { 
+  PERACETICO 
+  HIPOCLORITO 
+  OPA 
+  QUATERNARIO 
+  ALCOOL70 
+  OUTRO 
+}
+enum SterilMethod { 
+  STEAM_134 
+  STEAM_121 
+  H2O2 
+  ETO 
+  OUTRO 
+}
+enum QualResult { 
+  PASS 
+  FAIL 
+  NA 
+}
+
+model StageEvent {
+  id            String      @id @default(uuid())
+  materialId    String
+  cycleId       String
+  stage         String      // "RECEBIMENTO" | "LAVAGEM" | ...
+  occurredAt    DateTime    // horário vindo do LEDGER, quando disponível
+  recordedAt    DateTime    @default(now()) // horário do servidor
+  operatorId    String?     // X.509 (clientIdentity.getID())
+  operatorMSP   String?     // Org1MSP/Org2MSP
+  source        EventSource
+  ledgerTxId    String?     @unique
+  ledgerBlock   BigInt?     // do commit status
+  batchId       String?
+  notes         String?
+  meta         Json?     // <- detalhes da etapa
+
+  // relacionamentos (ajuste os names das tabelas se diferirem)
+  Material      Material    @relation(fields: [materialId], references: [id])
+  Cycle         Cycle       @relation(fields: [cycleId], references: [id])
+
+  @@index([materialId, occurredAt])
+  @@index([cycleId, occurredAt])
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role
+  badgeCode String   @unique
+  photoUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
+}
+
+enum Role {
+  ADMIN
+  TECH
+  AUDITOR
+}
+
+enum Etapa {
+  RECEBIMENTO
+  LAVAGEM
+  DESINFECCAO
+  ESTERILIZACAO
+  ARMAZENAMENTO
+}
+
+model Lote {
+  id           String      @id @default(uuid())
+  numero       String      @unique                // código/identificador impresso (QR/Code128)
+  nome         String?
+  etapa        Etapa       @default(ESTERILIZACAO)
+  criadoEm     DateTime    @default(now())
+  atualizadoEm DateTime    @updatedAt @default(now())
+
+  materiais    Material[]  @relation("LoteMateriais")
+
+  // ← LADO OPOSTO da relação com Cycle (1 lote tem muitos cycles)
+  cycles       Cycle[]     @relation("LoteCycles")
+}
+
+model Material {
+  id            String    @id @default(uuid())
+  nome          String
+  categoria     String
+  tipo          String
+  validade      DateTime
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+
+  // ↓↓↓ repostos para o front/usecases
+  codigo        String?   @db.VarChar(64) // se tiver certeza que é único, pode usar @unique
+  descricao     String?
+  ativo         Boolean   @default(true)
+
+  // NOVO:
+  reprocessamentos Int    @default(0)
+
+  loteId        String?
+  lote          Lote?     @relation("LoteMateriais", fields: [loteId], references: [id])
+  cycles        Cycle[]
+
+  StageEvent StageEvent[]
+}
+
+model Cycle {
+  id             String   @id @default(uuid())
+  materialId     String
+  etapa          String   // mantém uppercase vindo do DTO por enquanto
+  responsavel    String
+  observacoes    String?
+  timestamp      DateTime @default(now())
+  ledgerHash     String?
+
+  // FK para o Lote (opcional) + lado da relação
+  loteId         String?
+  lote           Lote?    @relation("LoteCycles", fields: [loteId], references: [id], onDelete: SetNull)
+
+  material       Material  @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([loteId])
+  StageEvent StageEvent[]
+}
+
+model ChemicalLot {
+  id           String        @id @default(uuid())
+  type         Disinfectant
+  lotCode      String
+  openedAt     DateTime?
+  expiryAt     DateTime?
+  concentration String?      // ex: "0,2%" ou ppm
+  notes        String?
+
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}

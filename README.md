@@ -1,0 +1,1 @@
+./network.sh deployCC -c mychannel -ccn cycle -ccp ../chaincode/cycle-javascript -ccl javascript -ccs 7

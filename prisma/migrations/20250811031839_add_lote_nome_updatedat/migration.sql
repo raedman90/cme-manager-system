@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "public"."Lote" ADD COLUMN     "atualizadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "nome" TEXT;

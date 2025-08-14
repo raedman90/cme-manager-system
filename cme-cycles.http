@@ -1,0 +1,67 @@
+@baseUrl = http://localhost:3333
+@loteId = REPLACE_LOTE_UUID
+
+### Login (stores token globally)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "123456"
+}
+
+> {%
+  client.test("store token", () => {
+    const data = JSON.parse(response.body);
+    client.global.set("token", data.token);
+  });
+%}
+
+### Create cycle (unitário) - usa materialId existente
+POST {{baseUrl}}/cycles
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "materialId": "53408221-2b48-4ddb-a518-078bcd083540",
+  "etapa": "LIMPEZA",
+  "responsavel": "Israel",
+  "observacoes": "via REST Client"
+}
+
+> {%
+  client.test("store cycleId", () => {
+    const data = JSON.parse(response.body);
+    // estrutura esperada: { origem, dados, cache: { id, ... } }
+    if (data && data.cache && data.cache.id) {
+      client.global.set("cycleId", data.cache.id);
+    }
+  });
+%}
+
+### Get by id (usa {{cycleId}} salvo no passo anterior)
+GET {{baseUrl}}/cycles/{{cycleId}}
+Authorization: Bearer {{token}}
+
+### List all (DB snapshot)
+GET {{baseUrl}}/cycles
+Authorization: Bearer {{token}}
+
+### List by batch (tenta Fabric -> fallback DB)
+GET {{baseUrl}}/cycles?batchId={{loteId}}
+Authorization: Bearer {{token}}
+
+### Create cycles for a lote (cria 1 ciclo por material do lote)
+POST {{baseUrl}}/cycles/lote/{{loteId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "etapa": "AUTOCLAVE",
+  "responsavel": "Israel",
+  "observacoes": "lote X"
+}
+
+### Delete (só banco) - usa {{cycleId}}
+DELETE {{baseUrl}}/cycles/{{cycleId}}
+Authorization: Bearer {{token}}

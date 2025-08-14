@@ -1,0 +1,236 @@
+{
+  "info": {
+    "name": "CME Cycles",
+    "_postman_id": "cme-cycles-collection",
+    "description": "Coleção para testar endpoints /cycles integrados ao Fabric.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Login (store token)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"SEU_EMAIL\",\n  \"password\": \"SUA_SENHA\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('store token', function () {",
+              "  var data = pm.response.json();",
+              "  pm.collectionVariables.set('token', data.token);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create cycle (unitário)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/cycles",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "cycles"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"materialId\": \"REPLACE_MATERIAL_UUID\",\n  \"etapa\": \"LIMPEZA\",\n  \"responsavel\": \"Israel\",\n  \"observacoes\": \"via Postman\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('store cycleId', function () {",
+              "  var data = pm.response.json();",
+              "  if (data && data.cache && data.cache.id) {",
+              "    pm.collectionVariables.set('cycleId', data.cache.id);",
+              "  }",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get by id",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/cycles/{{cycleId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "cycles",
+            "{{cycleId}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "List all",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/cycles",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "cycles"
+          ]
+        }
+      }
+    },
+    {
+      "name": "List by batch",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/cycles?batchId={{loteId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "cycles"
+          ],
+          "query": [
+            {
+              "key": "batchId",
+              "value": "{{loteId}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create cycles for lote",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/cycles/lote/{{loteId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "cycles",
+            "lote",
+            "{{loteId}}"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"etapa\": \"AUTOCLAVE\",\n  \"responsavel\": \"Israel\",\n  \"observacoes\": \"lote X\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Delete (só banco)",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/cycles/{{cycleId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "cycles",
+            "{{cycleId}}"
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "cycleId",
+      "value": ""
+    },
+    {
+      "key": "loteId",
+      "value": "REPLACE_LOTE_UUID"
+    }
+  ]
+}
