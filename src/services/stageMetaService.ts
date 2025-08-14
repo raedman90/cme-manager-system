@@ -97,6 +97,9 @@ export async function attachDisinfectionMeta(stageEventId: string, body: {
   solutionLotId?: string;
   testStripLot?: string;
   testStripResult?: "PASS" | "FAIL" | "NA";
+  activationTime?: string; // "HH:mm"
+  activationLevel?: "ATIVO_2" | "ATIVO_1" | "INATIVO" | "NAO_REALIZADO";
+  testStripExpiry?: string; // ISO date "YYYY-MM-DD"
   measuredTempC?: number;
   ph?: number;
 }) {
@@ -118,6 +121,9 @@ export async function attachDisinfectionMeta(stageEventId: string, body: {
       solutionLotId: body.solutionLotId,
       testStripLot: body.testStripLot,
       testStripResult: body.testStripResult ?? null,
+      activationTime: body.activationTime,
+      activationLevel: body.activationLevel as any,
+      testStripExpiry: body.testStripExpiry ? new Date(body.testStripExpiry) : null,
       measuredTempC: body.measuredTempC,
       ph: body.ph,
     },
@@ -129,6 +135,9 @@ export async function attachDisinfectionMeta(stageEventId: string, body: {
       solutionLotId: body.solutionLotId,
       testStripLot: body.testStripLot,
       testStripResult: body.testStripResult ?? null,
+      activationTime: body.activationTime,
+      activationLevel: body.activationLevel as any,
+      testStripExpiry: body.testStripExpiry ? new Date(body.testStripExpiry) : null,
       measuredTempC: body.measuredTempC,
       ph: body.ph,
     },

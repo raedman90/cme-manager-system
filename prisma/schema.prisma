@@ -107,7 +107,17 @@ model DisinfectionEvent {
   testStripResult TestResult?
   measuredTempC   Float?
   ph              Float?
+  activationTime  String?           // "HH:mm"
+  activationLevel DisinfectionActivationLevel?
+  testStripExpiry DateTime?         // validade da fita
   createdAt       DateTime          @default(now())
+}
+
+enum DisinfectionActivationLevel {
+  ATIVO_2
+  ATIVO_1
+  INATIVO
+  NAO_REALIZADO
 }
 
 model SterilizationEvent {

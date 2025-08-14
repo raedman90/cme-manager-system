@@ -10,28 +10,12 @@ import {
 const prisma = new PrismaClient();
 
 /** ---------- Helpers ---------- */
-async function resolveLatestStageEvent(cycleId: string) {
-  // último evento (mais recente) do ciclo
+async function resolveLatestStageEventOf(cycleId: string, stage: string) {
   return prisma.stageEvent.findFirst({
-    where: { cycleId },
+    where: { cycleId, stage },
     orderBy: { occurredAt: "desc" },
     select: { id: true, stage: true },
   });
-}
-
-function assertStage(kind: "wash" | "disinfection" | "sterilization" | "storage", stage?: string) {
-  if (!stage) return;
-  const expected = {
-    wash: "LAVAGEM",
-    disinfection: "DESINFECCAO",
-    sterilization: "ESTERILIZACAO",
-    storage: "ARMAZENAMENTO",
-  }[kind];
-  if (expected && stage.toUpperCase() !== expected) {
-    const err: any = new Error(`Último StageEvent do ciclo não é ${expected} (atual: ${stage}).`);
-    err.status = 400;
-    throw err;
-  }
 }
 
 export async function postWashMeta(req: Request, res: Response, next: NextFunction) {
@@ -79,9 +63,8 @@ export async function postWashMetaByCycle(req: Request, res: Response, next: Nex
     const { cycleId } = req.params;
     const body = req.body ?? {};
 
-    const evt = await resolveLatestStageEvent(cycleId);
-    if (!evt) return res.status(404).json({ error: "Nenhum StageEvent para este ciclo." });
-    assertStage("wash", evt.stage);
+    const evt = await resolveLatestStageEventOf(cycleId, "LAVAGEM");
+    if (!evt) return res.status(404).json({ error: "Nenhum StageEvent de LAVAGEM para este ciclo." });
 
     const saved = await attachWashMeta(evt.id, body);
     res.status(201).json({ ok: true, stageEventId: evt.id, data: saved });
@@ -92,10 +75,19 @@ export async function postDisinfectionMetaByCycle(req: Request, res: Response, n
   try {
     const { cycleId } = req.params;
     const body = req.body ?? {};
+    const force = req.query.force === "1";
 
-    const evt = await resolveLatestStageEvent(cycleId);
-    if (!evt) return res.status(404).json({ error: "Nenhum StageEvent para este ciclo." });
-    assertStage("disinfection", evt.stage);
+    const evt = await resolveLatestStageEventOf(cycleId, "DESINFECCAO");
+    if (!evt) return res.status(404).json({ error: "Nenhum StageEvent de DESINFECCAO para este ciclo." });
+
+    // Bloqueio de reenvio: se já existir registro e não forçar, 409
+    const existing = await prisma.disinfectionEvent.findUnique({ where: { stageEventId: evt.id } });
+    if (existing && !force) {
+      return res.status(409).json({
+        error: "Metadados de DESINFECCAO já existem para este StageEvent.",
+        stageEventId: evt.id,
+      });
+    }
 
     const saved = await attachDisinfectionMeta(evt.id, body);
     res.status(201).json({ ok: true, stageEventId: evt.id, data: saved });
@@ -107,9 +99,8 @@ export async function postSterilizationMetaByCycle(req: Request, res: Response, 
     const { cycleId } = req.params;
     const body = req.body ?? {};
 
-    const evt = await resolveLatestStageEvent(cycleId);
-    if (!evt) return res.status(404).json({ error: "Nenhum StageEvent para este ciclo." });
-    assertStage("sterilization", evt.stage);
+    const evt = await resolveLatestStageEventOf(cycleId, "ESTERILIZACAO");
+    if (!evt) return res.status(404).json({ error: "Nenhum StageEvent de ESTERILIZACAO para este ciclo." });
 
     const saved = await attachSterilizationMeta(evt.id, body);
     res.status(201).json({ ok: true, stageEventId: evt.id, data: saved });
@@ -121,11 +112,40 @@ export async function postStorageMetaByCycle(req: Request, res: Response, next: 
     const { cycleId } = req.params;
     const body = req.body ?? {};
 
-    const evt = await resolveLatestStageEvent(cycleId);
-    if (!evt) return res.status(404).json({ error: "Nenhum StageEvent para este ciclo." });
-    assertStage("storage", evt.stage);
+    const evt = await resolveLatestStageEventOf(cycleId, "ARMAZENAMENTO");
+    if (!evt) return res.status(404).json({ error: "Nenhum StageEvent de ARMAZENAMENTO para este ciclo." });
 
     const saved = await attachStorageMeta(evt.id, body);
     res.status(201).json({ ok: true, stageEventId: evt.id, data: saved });
+  } catch (e) { next(e); }
+}
+/** -------- GET para prefill: /cycles/:cycleId/stage-meta/:kind -------- */
+export async function getStageMetaByCycle(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { cycleId, kind } = req.params;
+    const map: Record<string, string> = {
+      wash: "LAVAGEM",
+      disinfection: "DESINFECCAO",
+      sterilization: "ESTERILIZACAO",
+      storage: "ARMAZENAMENTO",
+    };
+    const stage = map[(kind || "").toLowerCase()];
+    if (!stage) return res.status(400).json({ error: "Kind inválido." });
+
+    const evt = await resolveLatestStageEventOf(cycleId, stage);
+    if (!evt) return res.status(404).json({ error: `Sem StageEvent de ${stage} para este ciclo.` });
+
+    let detail: any = null;
+    if (stage === "DESINFECCAO") {
+      detail = await prisma.disinfectionEvent.findUnique({ where: { stageEventId: evt.id } });
+    } else if (stage === "LAVAGEM") {
+      detail = await prisma.washEvent.findUnique({ where: { stageEventId: evt.id } });
+    } else if (stage === "ESTERILIZACAO") {
+      detail = await prisma.sterilizationEvent.findUnique({ where: { stageEventId: evt.id } });
+    } else if (stage === "ARMAZENAMENTO") {
+      detail = await prisma.storageEvent.findUnique({ where: { stageEventId: evt.id } });
+    }
+
+    return res.json({ ok: true, cycleId, stageEventId: evt.id, stage, detail });
   } catch (e) { next(e); }
 }
