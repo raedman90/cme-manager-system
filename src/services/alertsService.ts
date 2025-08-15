@@ -1,0 +1,125 @@
+import { PrismaClient, AlertStatus, AlertSeverity, AlertKind } from "@prisma/client";
+const prisma = new PrismaClient();
+
+export type OpenAlertInput = {
+  key: string;
+  kind: AlertKind;
+  severity: AlertSeverity;
+  title: string;
+  message?: string;
+  cycleId?: string;
+  materialId?: string;
+  stageEventId?: string;
+  stage?: string;
+  dueAt?: Date | null;
+  data?: any;
+};
+
+export async function openAlertIfNotExists(input: OpenAlertInput) {
+  const found = await prisma.alert.findUnique({ where: { key: input.key } });
+  if (found && found.status !== "RESOLVED") return found;
+  // if exists but RESOLVED, re-open updating the record
+  return prisma.alert.upsert({
+    where: { key: input.key },
+    update: {
+      kind: input.kind,
+      severity: input.severity,
+      status: "OPEN",
+      title: input.title,
+      message: input.message,
+      cycleId: input.cycleId,
+      materialId: input.materialId,
+      stageEventId: input.stageEventId,
+      stage: input.stage,
+      dueAt: input.dueAt ?? null,
+      data: input.data ?? null,
+      resolvedAt: null,
+      ackedAt: null,
+      ackedBy: null,
+    },
+    create: {
+      key: input.key,
+      kind: input.kind,
+      severity: input.severity,
+      status: "OPEN",
+      title: input.title,
+      message: input.message,
+      cycleId: input.cycleId,
+      materialId: input.materialId,
+      stageEventId: input.stageEventId,
+      stage: input.stage,
+      dueAt: input.dueAt ?? null,
+      data: input.data ?? null,
+    },
+  });
+}
+
+export async function resolveAlertsByKey(prefixOrKey: string) {
+  // permite prefixo (resolve vários de uma vez) ou key exata
+  await prisma.alert.updateMany({
+    where: {
+      key: { startsWith: prefixOrKey },
+      status: { in: ["OPEN", "ACKED"] },
+    },
+    data: { status: "RESOLVED", resolvedAt: new Date() },
+  });
+}
+
+export async function resolveAlertsByStageEvent(stageEventId: string) {
+  await prisma.alert.updateMany({
+    where: { stageEventId, status: { in: ["OPEN", "ACKED"] } },
+    data: { status: "RESOLVED", resolvedAt: new Date() },
+  });
+}
+
+export async function ackAlert(id: string, userId?: string) {
+  return prisma.alert.update({
+    where: { id },
+    data: { status: "ACKED", ackedAt: new Date(), ackedBy: userId ?? null },
+  });
+}
+export async function resolveAlert(id: string) {
+  return prisma.alert.update({
+    where: { id },
+    data: { status: "RESOLVED", resolvedAt: new Date() },
+  });
+}
+
+export async function listAlerts(params: {
+  status?: "OPEN" | "ACKED" | "RESOLVED";
+  severity?: "INFO" | "WARNING" | "CRITICAL";
+  q?: string;
+  page?: number;
+  perPage?: number;
+}) {
+  const page = Math.max(1, Number(params.page ?? 1));
+  const perPage = Math.min(100, Math.max(1, Number(params.perPage ?? 20)));
+  const where: any = {};
+  if (params.status) where.status = params.status;
+  if (params.severity) where.severity = params.severity;
+  if (params.q) {
+    where.OR = [
+      { title: { contains: params.q, mode: "insensitive" } },
+      { message: { contains: params.q, mode: "insensitive" } },
+    ];
+  }
+  const [total, rows] = await Promise.all([
+    prisma.alert.count({ where }),
+    prisma.alert.findMany({
+      where,
+      orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
+      skip: (page - 1) * perPage,
+      take: perPage,
+    }),
+  ]);
+  return { data: rows, total, page, perPage };
+}
+
+export async function getAlertCounts() {
+  const [open, critical] = await Promise.all([
+    prisma.alert.count({ where: { status: "OPEN" } }),
+    prisma.alert.count({ where: { status: "OPEN", severity: "CRITICAL" } }),
+  ]);
+  return { open, critical };
+}
+

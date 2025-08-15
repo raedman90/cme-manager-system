@@ -242,3 +242,49 @@ model ChemicalLot {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ---------------------- ALERTAS ----------------------
+model Alert {
+  id          String        @id @default(cuid())
+  key         String        @unique   // deduplicação (ex.: "DISINFECTION_FAIL:cycleId:stageEventId")
+  kind        AlertKind
+  severity    AlertSeverity
+  status      AlertStatus   @default(OPEN)
+  title       String
+  message     String?
+  cycleId     String?
+  materialId  String?
+  stageEventId String?
+  stage       String?
+  dueAt       DateTime?
+  data        Json?
+  ackedBy     String?
+  ackedAt     DateTime?
+  resolvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, severity, createdAt])
+  @@index([cycleId])
+  @@index([stageEventId])
+}
+
+enum AlertKind {
+  DISINFECTION_FAIL
+  STERILIZATION_FAIL
+  STORAGE_EXPIRES_SOON
+  STORAGE_EXPIRED
+  READINESS_BLOCK
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKED
+  RESOLVED
+}

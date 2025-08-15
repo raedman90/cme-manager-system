@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { openAlertIfNotExists, resolveAlertsByKey } from "./alertsService";
 const prisma = new PrismaClient();
 
 // Utilitário para erro 400
@@ -144,6 +145,30 @@ export async function attachDisinfectionMeta(stageEventId: string, body: {
   });
 
   await mergeMetaJSON(stageEventId, { disinfection: saved });
+  // ----- ALERTAS -----
+  const se = await prisma.stageEvent.findUnique({ where: { id: stageEventId }, select: { cycleId: true, stage: true } });
+  const cycleId = se?.cycleId!;
+  const keyBase = `DISINFECTION_FAIL:${cycleId}:${stageEventId}`;
+  const badStrip = saved.testStripResult === "FAIL";
+  const inactive = saved.activationLevel === "INATIVO" || saved.activationLevel === "NAO_REALIZADO";
+  if (badStrip || inactive) {
+    await openAlertIfNotExists({
+      key: keyBase,
+      kind: "DISINFECTION_FAIL",
+      severity: "CRITICAL",
+      title: "Não conformidade na desinfecção",
+      message: badStrip
+        ? "Fita teste reprovada."
+        : "Solução desinfetante inativa ou teste não realizado.",
+      cycleId,
+      stageEventId,
+      stage: "DESINFECCAO",
+      data: { testStripResult: saved.testStripResult, activationLevel: saved.activationLevel },
+    });
+  } else {
+    // voltou a ficar ok -> resolver alerta desse SE
+    await resolveAlertsByKey(keyBase);
+  }
   return saved;
 }
 
@@ -187,6 +212,27 @@ export async function attachSterilizationMeta(stageEventId: string, body: {
   });
 
   await mergeMetaJSON(stageEventId, { sterilization: saved });
+  // ----- ALERTAS -----
+  const se = await prisma.stageEvent.findUnique({ where: { id: stageEventId }, select: { cycleId: true, stage: true } });
+  const cycleId = se?.cycleId!;
+  const keyBase = `STERILIZATION_FAIL:${cycleId}:${stageEventId}`;
+  const ciFail = saved.ci === "FAIL";
+  const biFail = saved.bi === "FAIL";
+  if (ciFail || biFail) {
+    await openAlertIfNotExists({
+      key: keyBase,
+      kind: "STERILIZATION_FAIL",
+      severity: "CRITICAL",
+      title: "Não conformidade na esterilização",
+      message: ciFail && biFail ? "CI e BI reprovados." : ciFail ? "CI reprovado." : "BI reprovado.",
+      cycleId,
+      stageEventId,
+      stage: "ESTERILIZACAO",
+      data: { ci: saved.ci, bi: saved.bi },
+    });
+  } else {
+    await resolveAlertsByKey(keyBase);
+  }
   return saved;
 }
 
@@ -220,5 +266,45 @@ export async function attachStorageMeta(stageEventId: string, body: {
   });
 
   await mergeMetaJSON(stageEventId, { storage: saved });
+  // ----- ALERTAS (validade) -----
+  const se = await prisma.stageEvent.findUnique({ where: { id: stageEventId }, select: { cycleId: true } });
+  const cycleId = se?.cycleId!;
+  const keyExpired = `STORAGE_EXPIRED:${cycleId}:${stageEventId}`;
+  const keySoon = `STORAGE_SOON:${cycleId}:${stageEventId}`;
+  const now = new Date();
+  const soonMs = 3 * 24 * 60 * 60 * 1000; // 3 dias (ajuste conforme política)
+  if (saved.expiresAt && saved.expiresAt.getTime() < now.getTime()) {
+    await openAlertIfNotExists({
+      key: keyExpired,
+      kind: "STORAGE_EXPIRED",
+      severity: "CRITICAL",
+      title: "Validade expirada",
+      message: `Pacote expirado em ${saved.expiresAt.toISOString()}`,
+      cycleId,
+      stageEventId,
+      stage: "ARMAZENAMENTO",
+      dueAt: saved.expiresAt,
+    });
+    // e resolve o "soon" se existir
+    await resolveAlertsByKey(keySoon);
+  } else if (saved.expiresAt && saved.expiresAt.getTime() - now.getTime() <= soonMs) {
+    await openAlertIfNotExists({
+      key: keySoon,
+      kind: "STORAGE_EXPIRES_SOON",
+      severity: "WARNING",
+      title: "Validade próxima do vencimento",
+      message: `Vence em breve (${saved.expiresAt.toISOString()})`,
+      cycleId,
+      stageEventId,
+      stage: "ARMAZENAMENTO",
+      dueAt: saved.expiresAt,
+    });
+    // garantir que "expired" não fique aberto
+    await resolveAlertsByKey(keyExpired);
+  } else {
+    // fora das janelas => limpa ambos
+    await resolveAlertsByKey(keySoon);
+    await resolveAlertsByKey(keyExpired);
+  }
   return saved;
 }
