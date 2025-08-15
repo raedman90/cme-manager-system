@@ -15,6 +15,7 @@ import { chemicalsRoutes } from './chemicalsRoutes'
 import stageMetaRoutes from './stageMetaRoutes'
 import cycleStageMetaRoutes from './cycleStageMetaRoutes'
 import alertsRoutes from './alertsRoutes'
+import lotsRoutes from './lotsRoutes'
 
 export const router = Router()
 
@@ -35,3 +36,4 @@ router.use("/stage-events", stageMetaRoutes);
 // ⬇️ alias para anexar metadados usando o cycleId (mantém o front intacto)
 router.use("/cycles", cycleStageMetaRoutes);
 router.use("/alerts", alertsRoutes);
+router.use("/lots", lotsRoutes);

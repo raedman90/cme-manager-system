@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { getSolutionLot, getTestStripLot } from "./lotsService";
 import { openAlertIfNotExists, resolveAlertsByKey } from "./alertsService";
 const prisma = new PrismaClient();
 
@@ -113,6 +114,125 @@ export async function attachDisinfectionMeta(stageEventId: string, body: {
     throw badRequest("DESINFECCAO: 'concentration' é obrigatória para o agente selecionado.");
   }
 
+  // -------- validações por lote + alertas --------
+  const evt = await prisma.stageEvent.findUnique({ where: { id: stageEventId }, select: { id: true, cycleId: true, stage: true } });
+  const cycleId = evt?.cycleId || undefined;
+
+  // helper concentração
+  function parseConcentrationTo(unit: "PERCENT" | "PPM", s?: string): number | null {
+    if (!s) return null;
+    const raw = String(s).replace(",", ".").toLowerCase().trim();
+    const num = parseFloat(raw.replace(/[^\d.]/g, ""));
+    if (!Number.isFinite(num)) return null;
+    const hasPPM = /ppm/.test(raw);
+    const hasPct = /%/.test(raw);
+    if (unit === "PPM") {
+      if (hasPPM) return num;
+      if (hasPct) return num * 10000; // 1% ≈ 10000 ppm (aprox.)
+      return num; // assume já está em ppm se não especificado
+    }
+    if (unit === "PERCENT") {
+      if (hasPct) return num;
+      if (hasPPM) return num / 10000;
+      return num; // assume %
+    }
+    return null;
+  }
+
+  // solução
+  if (body.solutionLotId) {
+    const lot = await getSolutionLot(body.solutionLotId);
+    if (lot) {
+      if (lot.agent !== body.agent) {
+        await openAlertIfNotExists({
+          key: `disinfection.solution.agent_mismatch.${stageEventId}`,
+          kind: "DISINFECTION_FAIL",
+          severity: "WARNING",
+          title: "Lote de solução incompatível com agente",
+          message: `Lote ${lot.lotNumber} é ${lot.agent}, mas agente informado é ${body.agent}.`,
+          cycleId,
+          stageEventId,
+          stage: "DESINFECCAO",
+        });
+      }
+      if (lot.expiryAt && lot.expiryAt < new Date()) {
+        await openAlertIfNotExists({
+          key: `disinfection.solution.expired.${body.solutionLotId}`,
+          kind: "DISINFECTION_FAIL",
+          severity: "CRITICAL",
+          title: "Solução desinfetante expirada",
+          message: `Lote ${lot.lotNumber} expirou em ${lot.expiryAt.toISOString().slice(0,10)}.`,
+          cycleId,
+          stageEventId,
+          stage: "DESINFECCAO",
+        });
+      } else {
+        await resolveAlertsByKey(`disinfection.solution.expired.${body.solutionLotId}`);
+      }
+      if (lot.unit && (lot.minValue != null || lot.maxValue != null) && body.concentration) {
+        const v = parseConcentrationTo(lot.unit, body.concentration);
+        const okMin = lot.minValue == null || (v != null && v >= lot.minValue);
+        const okMax = lot.maxValue == null || (v != null && v <= lot.maxValue);
+        if (!(okMin && okMax)) {
+          await openAlertIfNotExists({
+            key: `disinfection.solution.concentration.out_of_range.${stageEventId}`,
+            kind: "DISINFECTION_FAIL",
+            severity: "WARNING",
+            title: "Concentração fora da faixa esperada",
+            message: `Informada: ${body.concentration} · Esperado: ${lot.minValue ?? "?"}–${lot.maxValue ?? "?"} ${lot.unit}`,
+            cycleId,
+            stageEventId,
+            stage: "DESINFECCAO",
+          });
+        } else {
+          await resolveAlertsByKey(`disinfection.solution.concentration.out_of_range.${stageEventId}`);
+        }
+      }
+    }
+  }
+
+  // fita teste
+  if (body.testStripLot) {
+    const strip = await getTestStripLot(body.testStripLot);
+    if (strip) {
+      if (strip.agent !== body.agent) {
+        await openAlertIfNotExists({
+          key: `disinfection.strip.agent_mismatch.${stageEventId}`,
+          kind: "DISINFECTION_FAIL",
+          severity: "WARNING",
+          title: "Fita teste incompatível com agente",
+          message: `Fita Lote ${strip.lotNumber} é para ${strip.agent}, mas agente informado é ${body.agent}.`,
+          cycleId, stageEventId, stage: "DESINFECCAO",
+        });
+      }
+      if (strip.expiryAt && strip.expiryAt < new Date()) {
+        await openAlertIfNotExists({
+          key: `disinfection.strip.expired.${body.testStripLot}`,
+          kind: "DISINFECTION_FAIL",
+          severity: "CRITICAL",
+          title: "Fita teste expirada",
+          message: `Lote ${strip.lotNumber} expirou em ${strip.expiryAt.toISOString().slice(0,10)}.`,
+          cycleId, stageEventId, stage: "DESINFECCAO",
+        });
+      } else {
+        await resolveAlertsByKey(`disinfection.strip.expired.${body.testStripLot}`);
+      }
+    }
+  }
+
+  if (body.testStripResult === "FAIL") {
+    await openAlertIfNotExists({
+      key: `disinfection.strip.fail.${stageEventId}`,
+      kind: "DISINFECTION_FAIL",
+      severity: "CRITICAL",
+      title: "Fita teste reprovada",
+      message: `Resultado da fita teste: FAIL.`,
+      cycleId, stageEventId, stage: "DESINFECCAO",
+    });
+  } else if (body.testStripResult === "PASS") {
+    await resolveAlertsByKey(`disinfection.strip.fail.${stageEventId}`);
+  }
+
   const saved = await prisma.disinfectionEvent.upsert({
     where: { stageEventId },
     update: {
@@ -147,7 +267,6 @@ export async function attachDisinfectionMeta(stageEventId: string, body: {
   await mergeMetaJSON(stageEventId, { disinfection: saved });
   // ----- ALERTAS -----
   const se = await prisma.stageEvent.findUnique({ where: { id: stageEventId }, select: { cycleId: true, stage: true } });
-  const cycleId = se?.cycleId!;
   const keyBase = `DISINFECTION_FAIL:${cycleId}:${stageEventId}`;
   const badStrip = saved.testStripResult === "FAIL";
   const inactive = saved.activationLevel === "INATIVO" || saved.activationLevel === "NAO_REALIZADO";

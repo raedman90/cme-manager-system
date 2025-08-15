@@ -301,3 +301,39 @@ model AlertComment {
 
   @@index([alertId, createdAt])
 }
+
+enum ConcentrationUnit {
+  PERCENT   // ex.: 0.2 (%)
+  PPM       // ex.: 2000 (ppm)
+}
+
+model SolutionLot {
+  id              String             @id @default(cuid())
+  lotNumber       String
+  agent           DisinfectionAgent
+  concentrationLabel String?         // ex.: "0,2% / 2000 ppm"
+  unit            ConcentrationUnit? // se informado, faz verificação numérica
+  minValue        Float?             // faixa válida (de)
+  maxValue        Float?             // faixa válida (até)
+  expiryAt        DateTime           // validade da solução preparada
+  brand           String?
+  supplier        String?
+  notes           String?
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+
+  @@index([agent, active, expiryAt])
+}
+
+model TestStripLot {
+  id         String             @id @default(cuid())
+  lotNumber  String
+  agent      DisinfectionAgent  // agente para o qual a fita é destinada
+  expiryAt   DateTime
+  brand      String?
+  notes      String?
+  active     Boolean            @default(true)
+  createdAt  DateTime           @default(now())
+
+  @@index([agent, active, expiryAt])
+}
