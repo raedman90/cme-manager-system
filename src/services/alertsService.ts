@@ -1,6 +1,8 @@
 import { PrismaClient, AlertStatus, AlertSeverity, AlertKind } from "@prisma/client";
 import { emitAlertOpen, emitAlertAck, emitAlertResolve, emitCounts } from "../events/alertsBus";
 import { emitAlertComment } from "../events/alertsBus";
+import { format as fmtTz } from "date-fns-tz";
+import { addDays, eachDayOfInterval } from "date-fns";
 const prisma = new PrismaClient();
 
 export type OpenAlertInput = {
@@ -164,4 +166,49 @@ export async function listAlertComments(alertId: string, page = 1, perPage = 50)
     prisma.alertComment.count({ where: { alertId } }),
   ]);
   return { data, total, page, perPage };
+}
+
+// ---------- KPIs ----------
+export async function getAlertsStats(args: { from?: string; to?: string; tz?: string }) {
+  const tz = args.tz || "America/Fortaleza";
+  const now = new Date();
+  const from = args.from ? new Date(args.from) : addDays(now, -29);
+  const to = args.to ? new Date(args.to) : now;
+
+  // Busca em intervalo (createdAt)
+  const rows = await prisma.alert.findMany({
+    where: {
+      createdAt: { gte: from, lte: to },
+    },
+    select: { id: true, kind: true, severity: true, createdAt: true, status: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Bucket diário no TZ escolhido
+  type DayAgg = { day: string; total: number; CRITICAL: number; WARNING: number; INFO: number };
+  const byDayMap = new Map<string, DayAgg>();
+  const days = eachDayOfInterval({ start: from, end: to });
+  for (const d of days) {
+    const day = fmtTz(d, "yyyy-MM-dd", { timeZone: tz });
+    byDayMap.set(day, { day, total: 0, CRITICAL: 0, WARNING: 0, INFO: 0 });
+  }
+
+  const byKindMap = new Map<string, number>();
+  let totals = { total: 0, CRITICAL: 0, WARNING: 0, INFO: 0 };
+
+  for (const r of rows) {
+    const day = fmtTz(r.createdAt, "yyyy-MM-dd", { timeZone: tz });
+    const agg = byDayMap.get(day) || { day, total: 0, CRITICAL: 0, WARNING: 0, INFO: 0 };
+    agg.total += 1;
+    (agg as any)[r.severity] += 1;
+    byDayMap.set(day, agg);
+    totals.total += 1;
+    (totals as any)[r.severity] += 1;
+    byKindMap.set(r.kind, (byKindMap.get(r.kind) || 0) + 1);
+  }
+
+  const byDay = Array.from(byDayMap.values()).sort((a, b) => a.day.localeCompare(b.day));
+  const byKind = Array.from(byKindMap.entries()).map(([kind, count]) => ({ kind, count }));
+
+  return { tz, from: from.toISOString(), to: to.toISOString(), byDay, byKind, totals };
 }

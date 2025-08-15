@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { ackAlert, resolveAlert, listAlerts, getAlertCounts, addAlertComment, listAlertComments } from "../services/alertsService";
+import { ackAlert, resolveAlert, listAlerts, getAlertCounts, addAlertComment, listAlertComments, getAlertsStats  } from "../services/alertsService";
 import { sweepStorageValidity } from "../services/alertsSweepService";
 import { alertsBus, type AlertsStreamEvent } from "../events/alertsBus";
 
@@ -93,5 +93,12 @@ export async function postAlertComment(req: Request, res: Response, next: NextFu
     const computedAuthor = author || user.name || user.displayName || headerAuthor || user.id || null;
     const saved = await addAlertComment(id, text, computedAuthor);
     res.status(201).json(saved);
+  } catch (e) { next(e); }
+}
+export async function getAlertsStatsCtrl(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { from, to, tz } = req.query;
+    const out = await getAlertsStats({ from: from as string | undefined, to: to as string | undefined, tz: (tz as string) || undefined });
+    res.json(out);
   } catch (e) { next(e); }
 }
