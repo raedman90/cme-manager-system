@@ -4,7 +4,6 @@ import {
   postDisinfectionMeta,
   postSterilizationMeta,
   postStorageMeta,
-  getStageMetaByCycle,
 } from "../controllers/stageMetaController";
 
 const router = Router();
@@ -15,6 +14,6 @@ router.post("/:id/wash", postWashMeta);
 router.post("/:id/disinfection", postDisinfectionMeta);
 router.post("/:id/sterilization", postSterilizationMeta);
 router.post("/:id/storage", postStorageMeta);
-router.get("/:cycleId/stage-meta/:kind", getStageMetaByCycle);
+
 
 export default router;

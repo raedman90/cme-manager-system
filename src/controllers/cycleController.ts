@@ -13,13 +13,25 @@ export async function criarCiclo(req: Request, res: Response) {
 
 export async function listarCiclos(req: Request, res: Response) {
   const { loteId, batchId, materialId, etapa, q } = req.query;
-  const ciclos = await listCyclesUseCase({
+  // paginação + ordenação (com defaults seguros)
+  const page = Math.max(1, Number(req.query.page ?? 1));
+  const perPage = Math.min(100, Math.max(1, Number(req.query.perPage ?? 10)));
+  const sort = (["timestamp", "etapa", "responsavel"] as const).includes(String(req.query.sort) as any)
+    ? (req.query.sort as "timestamp" | "etapa" | "responsavel")
+    : "timestamp";
+  const order = String(req.query.order ?? "desc").toLowerCase() === "asc" ? "asc" : "desc";
+
+  const result = await listCyclesUseCase({
     loteId: (loteId || batchId) as string | undefined,
     materialId: materialId as string | undefined,
     etapa: etapa as string | undefined,
     q: q as string | undefined,
+    page,
+    perPage,
+    sort,
+    order,
   });
-  res.json(ciclos);
+  res.json(result); // { data, total, page, perPage }
 }
 
 export async function deletarCiclo(req: Request, res: Response) {
