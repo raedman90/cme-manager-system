@@ -70,6 +70,9 @@ export async function atualizarEtapa(req: Request, res: Response, next: NextFunc
     if (m.includes("mvcc") || m.includes("conflict")) {
       return next({ name: "ConflictError", status: 409, message: "Conflito de versão no ledger" });
     }
+    if (e?.name === "AlertBlockError" || e?.status === 412) {
+      return next({ name: "PreconditionFailed", status: 412, message: "Há alertas críticos abertos para este ciclo." });
+    }
     next(e);
   }
 }

@@ -2,11 +2,12 @@ import type { UpdateStageDTO } from "../../dtos/ICycleDTO";
 import { eventBus as _eventBus } from "../../events/eventBus";
 import { checkReadyTo } from "../../services/stageReadinessService";
 import { recordUpdateStage } from "../../services/traceService";
+import { hasOpenCriticalAlerts } from "../../services/alertsService";
 
 export async function updateCycleStageUseCase(id: string, dto: UpdateStageDTO & { params?: any }) {
   const next = String(dto.etapa).toUpperCase();
 
-  if (next === "ESTERILIZACAO" || next === "ARMAZENAMENTO") {
+  /*if (next === "ESTERILIZACAO" || next === "ARMAZENAMENTO") {
     const r = await checkReadyTo(id, next as any);
     if (!r.ok) {
       const err: any = new Error("Regras de progresso não atendidas.");
@@ -14,7 +15,15 @@ export async function updateCycleStageUseCase(id: string, dto: UpdateStageDTO & 
       err.reasons = r.reasons;
       throw err;
     }
+  }*/
+  // 🚫 Bloqueia avanço se houver CRITICAL aberto no ciclo (a menos que force)
+  if (!dto.force && (await hasOpenCriticalAlerts(id))) {
+    const err: any = new Error("Há alertas críticos abertos para este ciclo. Use force para prosseguir.");
+    err.status = 412; // Precondition Failed
+    err.name = "AlertBlockError";
+    throw err;
   }
+
   const { txId } = await recordUpdateStage({
     cycleId: id,
     nextStage: dto.etapa,

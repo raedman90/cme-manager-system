@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { ackAlert, resolveAlert, listAlerts, getAlertCounts } from "../services/alertsService";
+import { ackAlert, resolveAlert, listAlerts, getAlertCounts, addAlertComment, listAlertComments } from "../services/alertsService";
 import { sweepStorageValidity } from "../services/alertsSweepService";
 import { alertsBus, type AlertsStreamEvent } from "../events/alertsBus";
 
@@ -69,4 +69,29 @@ export async function getAlertsStream(req: Request, res: Response) {
     alertsBus.off("alert", onEvent);
     res.end();
   });
+}
+export async function getAlertComments(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const { page, perPage } = req.query;
+    const out = await listAlertComments(id, Number(page) || 1, Number(perPage) || 50);
+    res.json(out);
+  } catch (e) { next(e); }
+}
+
+export async function postAlertComment(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const { text, author } = req.body ?? {};
+    // tenta pegar autor do contexto de auth/headers
+    const user = (req as any).user || (res as any).locals?.user || {};
+    const headerAuthor =
+      (req.headers["x-user-name"] as string) ||
+      (req.headers["x-user"] as string) ||
+      (req.headers["x-operator"] as string) ||
+      "";
+    const computedAuthor = author || user.name || user.displayName || headerAuthor || user.id || null;
+    const saved = await addAlertComment(id, text, computedAuthor);
+    res.status(201).json(saved);
+  } catch (e) { next(e); }
 }

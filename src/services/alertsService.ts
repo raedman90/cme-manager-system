@@ -1,5 +1,6 @@
 import { PrismaClient, AlertStatus, AlertSeverity, AlertKind } from "@prisma/client";
 import { emitAlertOpen, emitAlertAck, emitAlertResolve, emitCounts } from "../events/alertsBus";
+import { emitAlertComment } from "../events/alertsBus";
 const prisma = new PrismaClient();
 
 export type OpenAlertInput = {
@@ -130,4 +131,37 @@ export async function getAlertCounts() {
   ]);
   return { open, critical };
 }
+export async function hasOpenCriticalAlerts(cycleId: string) {
+  const n = await prisma.alert.count({
+    where: { cycleId, status: { in: ["OPEN", "ACKED"] }, severity: "CRITICAL" },
+  });
+  return n > 0;
+}
 
+// ---------- Comments ----------
+export async function addAlertComment(alertId: string, text: string, author?: string | null) {
+  if (!text || !text.trim()) {
+    const e: any = new Error("Texto do comentário é obrigatório.");
+    e.status = 400;
+    throw e;
+  }
+  const comment = await prisma.alertComment.create({
+    data: { alertId, text: text.trim(), author: author ?? null },
+  });
+  emitAlertComment(comment);
+  return comment;
+}
+
+export async function listAlertComments(alertId: string, page = 1, perPage = 50) {
+  const skip = Math.max(0, (page - 1) * perPage);
+  const [data, total] = await Promise.all([
+    prisma.alertComment.findMany({
+      where: { alertId },
+      orderBy: { createdAt: "asc" },
+      skip,
+      take: perPage,
+    }),
+    prisma.alertComment.count({ where: { alertId } }),
+  ]);
+  return { data, total, page, perPage };
+}

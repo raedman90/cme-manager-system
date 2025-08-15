@@ -264,6 +264,7 @@ model Alert {
   resolvedAt  DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+  comments    AlertComment[]
 
   @@index([status, severity, createdAt])
   @@index([cycleId])
@@ -288,4 +289,15 @@ enum AlertStatus {
   OPEN
   ACKED
   RESOLVED
+}
+
+model AlertComment {
+  id        String   @id @default(cuid())
+  alertId   String
+  alert     Alert    @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  author    String?
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([alertId, createdAt])
 }

@@ -20,7 +20,8 @@ export const CreateCycleLoteSchema = z.object({
 export const UpdateStageSchema = z.object({
   etapa: z.string().min(3),
   responsavel: z.string().min(3),
-  observacoes: z.string().optional()
+  observacoes: z.string().optional(),
+  force: z.boolean().optional()
 });
 
 export type CreateCycleDTO = z.infer<typeof CreateCycleSchema>;
