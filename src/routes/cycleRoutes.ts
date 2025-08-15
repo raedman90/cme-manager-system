@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { criarCiclo, listarCiclos, deletarCiclo, criarCicloParaLote, obterCiclo, atualizarEtapa  } from '../controllers/cycleController'
+import { criarCiclo, listarCiclos, deletarCiclo, criarCicloParaLote, obterCiclo, atualizarEtapa, getReadiness  } from '../controllers/cycleController'
 import { autenticarJWT } from '../middlewares/authMiddleware'
 import { permitirRoles } from '../middlewares/roleMiddleware'
 import { validateBody } from '../middlewares/validate'
@@ -16,3 +16,4 @@ cycleRoutes.delete('/:id', permitirRoles('ADMIN'), deletarCiclo)
 cycleRoutes.post('/lote/:loteId',permitirRoles('ADMIN', 'TECH'),validateBody(CreateCycleLoteSchema), criarCicloParaLote)
 cycleRoutes.get('/:id', permitirRoles('ADMIN', 'TECH', 'AUDITOR'), obterCiclo)
 cycleRoutes.patch('/:id/stage',permitirRoles('ADMIN','TECH'),validateBody(UpdateStageSchema),atualizarEtapa);
+cycleRoutes.get("/:cycleId/readiness", permitirRoles('ADMIN','TECH'), getReadiness); // << novo

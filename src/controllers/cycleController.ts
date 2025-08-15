@@ -5,6 +5,7 @@ import { deleteCycleUseCase } from '../usecases/cycle/deleteCycle'
 import { createCycleForLoteUseCase } from '../usecases/cycle/createCycleForLote'
 import { getCycleByIdUseCase } from '../usecases/cycle/getCycleById'
 import { updateCycleStageUseCase } from '../usecases/cycle/updateCycleStage';
+import { checkReadyTo } from '../services/stageReadinessService'
 
 export async function criarCiclo(req: Request, res: Response) {
   const ciclo = await createCycleUseCase(req.body)
@@ -55,6 +56,14 @@ export async function atualizarEtapa(req: Request, res: Response, next: NextFunc
     res.json(result);
   } catch (e:any) {
     const m = (e?.message || "").toLowerCase();
+    if (e?.status === 422) {
+      return next({
+        name: "UnprocessableEntity",
+        status: 422,
+        message: e?.message || "Regras de progresso não atendidas",
+        reasons: e?.reasons || [],
+      });
+    }
     if (m.includes("not found") || m.includes("does not exist")) {
       return next({ name: "NotFoundError", status: 404, message: "Ciclo não encontrado" });
     }
@@ -63,4 +72,15 @@ export async function atualizarEtapa(req: Request, res: Response, next: NextFunc
     }
     next(e);
   }
+}
+export async function getReadiness(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { cycleId } = req.params;
+    const to = String(req.query.to || "").toUpperCase();
+    if (!["ESTERILIZACAO", "ARMAZENAMENTO"].includes(to)) {
+      return res.status(400).json({ error: "Parâmetro 'to' inválido." });
+    }
+    const r = await checkReadyTo(cycleId, to as any);
+    res.json(r);
+  } catch (e) { next(e); }
 }
