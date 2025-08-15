@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { ackAlert, resolveAlert, listAlerts, getAlertCounts } from "../services/alertsService";
 import { sweepStorageValidity } from "../services/alertsSweepService";
+import { alertsBus, type AlertsStreamEvent } from "../events/alertsBus";
 
 export async function getAlerts(req: Request, res: Response, next: NextFunction) {
   try {
@@ -42,4 +43,30 @@ export async function postSweepAlerts(req: Request, res: Response, next: NextFun
     const out = await sweepStorageValidity(days);
     res.json(out);
   } catch (e) { next(e); }
+}
+
+// ---------- SSE ----------
+export async function getAlertsStream(req: Request, res: Response) {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  // CORS opcional, se necessário:
+  // res.setHeader("Access-Control-Allow-Origin", "*");
+
+  const send = (ev: AlertsStreamEvent) => {
+    res.write(`event: alert\n`);
+    res.write(`data: ${JSON.stringify(ev)}\n\n`);
+  };
+
+  // ping inicial + contadores
+  send({ type: "counts", counts: await getAlertCounts() });
+  const onEvent = (ev: AlertsStreamEvent) => send(ev);
+  alertsBus.on("alert", onEvent);
+
+  const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), 25000);
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    alertsBus.off("alert", onEvent);
+    res.end();
+  });
 }

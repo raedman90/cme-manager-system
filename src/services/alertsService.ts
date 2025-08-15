@@ -1,4 +1,5 @@
 import { PrismaClient, AlertStatus, AlertSeverity, AlertKind } from "@prisma/client";
+import { emitAlertOpen, emitAlertAck, emitAlertResolve, emitCounts } from "../events/alertsBus";
 const prisma = new PrismaClient();
 
 export type OpenAlertInput = {
@@ -19,7 +20,7 @@ export async function openAlertIfNotExists(input: OpenAlertInput) {
   const found = await prisma.alert.findUnique({ where: { key: input.key } });
   if (found && found.status !== "RESOLVED") return found;
   // if exists but RESOLVED, re-open updating the record
-  return prisma.alert.upsert({
+  const alert = await prisma.alert.upsert({
     where: { key: input.key },
     update: {
       kind: input.kind,
@@ -52,17 +53,20 @@ export async function openAlertIfNotExists(input: OpenAlertInput) {
       data: input.data ?? null,
     },
   });
+  emitAlertOpen(alert);
+  return alert;
 }
 
 export async function resolveAlertsByKey(prefixOrKey: string) {
   // permite prefixo (resolve vários de uma vez) ou key exata
-  await prisma.alert.updateMany({
+  const res = await prisma.alert.updateMany({
     where: {
       key: { startsWith: prefixOrKey },
       status: { in: ["OPEN", "ACKED"] },
     },
     data: { status: "RESOLVED", resolvedAt: new Date() },
   });
+  if (res.count > 0) await emitCounts();
 }
 
 export async function resolveAlertsByStageEvent(stageEventId: string) {
@@ -73,16 +77,20 @@ export async function resolveAlertsByStageEvent(stageEventId: string) {
 }
 
 export async function ackAlert(id: string, userId?: string) {
-  return prisma.alert.update({
+  const alert = await prisma.alert.update({
     where: { id },
     data: { status: "ACKED", ackedAt: new Date(), ackedBy: userId ?? null },
   });
+  emitAlertAck(alert);
+  return alert;
 }
 export async function resolveAlert(id: string) {
-  return prisma.alert.update({
+  const alert = await prisma.alert.update({
     where: { id },
     data: { status: "RESOLVED", resolvedAt: new Date() },
   });
+  emitAlertResolve(alert);
+  return alert;
 }
 
 export async function listAlerts(params: {
