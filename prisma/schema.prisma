@@ -144,6 +144,7 @@ model StorageEvent {
   expiresAt    DateTime?
   integrityOk  Boolean?
   createdAt    DateTime     @default(now())
+  @@index([expiresAt])
 }
 
 model User {

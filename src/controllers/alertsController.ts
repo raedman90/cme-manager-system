@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { ackAlert, resolveAlert, listAlerts, getAlertCounts } from "../services/alertsService";
+import { sweepStorageValidity } from "../services/alertsSweepService";
 
 export async function getAlerts(req: Request, res: Response, next: NextFunction) {
   try {
@@ -32,5 +33,13 @@ export async function patchResolveAlert(req: Request, res: Response, next: NextF
   try {
     const { id } = req.params;
     res.json(await resolveAlert(id));
+  } catch (e) { next(e); }
+}
+
+export async function postSweepAlerts(req: Request, res: Response, next: NextFunction) {
+  try {
+    const days = Number(req.body?.daysSoon ?? process.env.STORAGE_SOON_DAYS ?? 3);
+    const out = await sweepStorageValidity(days);
+    res.json(out);
   } catch (e) { next(e); }
 }
