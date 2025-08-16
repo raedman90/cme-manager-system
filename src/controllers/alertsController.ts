@@ -47,11 +47,13 @@ export async function postSweepAlerts(req: Request, res: Response, next: NextFun
 
 // ---------- SSE ----------
 export async function getAlertsStream(req: Request, res: Response) {
+  const ORIGIN = process.env.FRONT_ORIGIN || "http://localhost:5173";
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-  // CORS opcional, se necessário:
-  // res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Origin", ORIGIN);
+  res.setHeader("Vary", "Origin");
+  (res as any).flushHeaders?.();
 
   const send = (ev: AlertsStreamEvent) => {
     res.write(`event: alert\n`);

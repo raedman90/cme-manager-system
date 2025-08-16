@@ -16,6 +16,8 @@ import stageMetaRoutes from './stageMetaRoutes'
 import cycleStageMetaRoutes from './cycleStageMetaRoutes'
 import alertsRoutes from './alertsRoutes'
 import lotsRoutes from './lotsRoutes'
+import { authNormalizeQueryToHeader } from '../middlewares/authNormalizeQueryToHeader'
+import { autenticarJWT } from '../middlewares/authMiddleware'
 
 export const router = Router()
 
@@ -35,5 +37,6 @@ router.use("/chemicals", chemicalsRoutes);
 router.use("/stage-events", stageMetaRoutes);
 // ⬇️ alias para anexar metadados usando o cycleId (mantém o front intacto)
 router.use("/cycles", cycleStageMetaRoutes);
+//router.use("/alerts", alertsRoutes);
 router.use("/alerts", alertsRoutes);
 router.use("/lots", lotsRoutes);
